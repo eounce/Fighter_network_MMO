@@ -1,0 +1,9 @@
+                Name |           Average |               Min |               Max |            Call
+       select_socket |         27.4595us |          2.2000us |      27266.8000us |         2183273
+         accept_proc |         59.7825us |         23.8000us |        629.5000us |            3303
+           send_proc |         18.7091us |          3.2000us |       3777.8000us |         1407461
+           send_send |         17.7226us |          2.8000us |       3774.0000us |         1407461
+   DirectDequeueSize |          0.0541us |          0.0000us |        410.4000us |         1407461
+   GetFrontBufferPtr |          0.0238us |          0.0000us |        164.2000us |         1407461
+           MoveFront |          0.0325us |          0.0000us |       1340.2000us |         1439279
+           recv_proc |         12.8751us |          2.2000us |        762.4000us |           42005
