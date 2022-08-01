@@ -22,7 +22,8 @@ Message::~Message()
 
 void Message::release()
 {
-
+	delete _pBuffer;
+	_pBuffer = nullptr;
 }
 
 int Message::moveWritePos(int size)
@@ -60,7 +61,6 @@ int	Message::getData(char* pDest, int size)
 
 	memcpy_s(pDest, size, &_pBuffer[_front], size);
 	_front += size;
-	_dataSize -= size;
 
 	return size;
 }
@@ -72,7 +72,6 @@ int	Message::putData(char* pSrc, int srcSize)
 
 	memcpy_s(&_pBuffer[_rear], srcSize, pSrc, srcSize);
 	_rear += srcSize;
-	_dataSize += srcSize;
 
 	return srcSize;
 }

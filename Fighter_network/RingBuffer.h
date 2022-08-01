@@ -8,7 +8,11 @@ private:
 	int _rear = 0;
 	int _bufferSize;
 	char* _buffer;
+	SRWLOCK _srw;
+
 public:
+	enum LOCK { EXCLUSIVE = 1, SHARED };
+
 	RingBuffer(int bufferSize = 10000);
 	~RingBuffer();
 
@@ -30,6 +34,9 @@ public:
 
 	char* GetFrontBufferPtr(void);
 	char* GetRearBufferPtr(void);
+
+	void Lock(LOCK type);
+	void Unlock(LOCK type);
 };
 
 #endif

@@ -16,11 +16,17 @@
 #define SECTOR_WIDTH 64
 */
 
+#define SECTOR_MAX_Y 50	// 200
+#define SECTOR_MAX_X 50	// 256
+#define SECTOR_HEIGHT 128
+#define SECTOR_WIDTH 128
+
+/*
 #define SECTOR_MAX_Y 25	// 200
 #define SECTOR_MAX_X 20	// 256
 #define SECTOR_HEIGHT 256
 #define SECTOR_WIDTH 320
-
+*/
 
 // 이동 범위 오류
 #define ERROR_RANGE		50
@@ -48,9 +54,9 @@
 #define ATTACK3_RANGE_Y		20
 
 // 프레임당 이동 단위
-#define SLEEP_TIME 40  // 50 frame (20)
-#define FRAME_MOVE_X 6  // 3
-#define FRAME_MOVE_Y 4  // 2
+#define SLEEP_TIME 40  // 50 frame (20) 40
+#define FRAME_MOVE_X 6  // 3 6
+#define FRAME_MOVE_Y 4  // 2 4
 
 // 프로토콜 정의
 #define	PACKET_SC_CREATE_MY_CHARACTER			0

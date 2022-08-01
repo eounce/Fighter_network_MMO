@@ -1,4 +1,4 @@
-#define PROFILE
+//#define PROFILE
 
 #pragma comment(lib, "ws2_32")
 #pragma comment(lib, "winmm.lib")
@@ -217,6 +217,8 @@ void serverControl()
 
 void monitor()
 {
+	Profile profile(L"monitor");
+
 	static int oldTime = timeGetTime();
 	int curTime = timeGetTime();
 	if (curTime - oldTime < 1000) return;
@@ -228,7 +230,7 @@ void monitor()
 	localtime_s(&t, &timer);
 
 	// 프레임이 떨어지면 로그 남기기
-	if (g_updateCnt < 25)
+	if (g_updateCnt < 24)
 	{
 		_LOG(LOG_LEVEL_SYSTEM, L"FPS Drop : %d", g_updateCnt);
 	}
@@ -278,6 +280,8 @@ void monitor()
 
 void log(WCHAR* str, int logLevel)
 {
+	Profile profile(L"log");
+
 	//wprintf(L"%s\n", str);
 	FILE* pFile;
 	time_t timer;
@@ -481,6 +485,8 @@ void characterSectorUpdatePacket(Character* pCharacter)
 // ---------------------------------------------
 void update()
 {
+	Profile profile(L"update");
+
 	static DWORD prePrameTime = timeGetTime();
     DWORD curPrameTime = timeGetTime();
 	int frameTime = curPrameTime - prePrameTime;
@@ -514,7 +520,7 @@ void update()
 		{
 			if (curPrameTime - pCharacter->pSession->lastRecvTime > NETWORK_PACKET_RECV_TIMEOUT)
 			{
-				_LOG(LOG_LEVEL_SYSTEM, L"TimeOut SessionID:%d", pCharacter->sessionID);
+				// _LOG(LOG_LEVEL_SYSTEM, L"TimeOut SessionID:%d", pCharacter->sessionID);
 				pCharacter->flag = true;
 				pCharacter->pSession->flag = true;
 				continue;
@@ -683,6 +689,7 @@ void disconnectSession(SOCKET socket)
 
 void netProcess()
 {
+	Profile profile(L"netProcess");
 	int curNetworkTime = timeGetTime();
 
 	Session* pSession;
@@ -720,7 +727,7 @@ void netProcess()
 			FD_ZERO(&writeSet);
 
 			// SOCKET 배열 초기화
-			memset(userSocketTable, INVALID_SOCKET, sizeof(userSocketTable));
+			//memset(userSocketTable, INVALID_SOCKET, sizeof(userSocketTable));
 
 			// 리스닝 소켓 등록
 			socketCnt = 0;
@@ -731,6 +738,7 @@ void netProcess()
 
 	if (socketCnt > 0)
 	{
+		userSocketTable[socketCnt] = INVALID_SOCKET;
 		netSelectSocket(userSocketTable, &readSet, &writeSet);
 	}
 
@@ -739,7 +747,7 @@ void netProcess()
 
 void netSelectSocket(SOCKET* userSocketTable, FD_SET* readSet, FD_SET* writeSet)
 {
-	Profile profile(L"select_socket");
+	Profile profile(L"netSelectSocket");
 	int curSelectTime = timeGetTime();
 
 	int count;
@@ -768,7 +776,6 @@ void netSelectSocket(SOCKET* userSocketTable, FD_SET* readSet, FD_SET* writeSet)
 
 			if (FD_ISSET(userSocketTable[i], writeSet))
 			{
-				Profile p1(L"send_proc");
 				netSendProc(userSocketTable[i]);
 				count--;
 			}
@@ -778,12 +785,10 @@ void netSelectSocket(SOCKET* userSocketTable, FD_SET* readSet, FD_SET* writeSet)
 				count--;
 				if (userSocketTable[i] == g_listenSock)
 				{
-					Profile p2(L"accept_proc");
 					netAcceptProc();
 				}
 				else
 				{
-					Profile p3(L"recv_proc");
 					netRecvProc(userSocketTable[i]);
 				}
 			}
@@ -797,6 +802,7 @@ void netSelectSocket(SOCKET* userSocketTable, FD_SET* readSet, FD_SET* writeSet)
 
 void netAcceptProc()
 {
+	Profile profile(L"netAcceptProc");
 	int curAcceptTime = timeGetTime();
 
 	SOCKET sock;
@@ -862,6 +868,7 @@ void netAcceptProc()
 
 void netSendProc(SOCKET socket)
 {
+	Profile profile(L"netSendProc");
 	int curSendTime = timeGetTime();
 
 	int error;
@@ -869,7 +876,7 @@ void netSendProc(SOCKET socket)
 	Session* pSession = findSession(socket);
 
 	{
-		Profile p(L"send_send");
+		Profile p(L"send");
 		sendRet = send(socket, pSession->sendQ.GetFrontBufferPtr(), pSession->sendQ.DirectDequeueSize(), 0);
 	}
 	if (sendRet == SOCKET_ERROR)
@@ -893,6 +900,7 @@ void netSendProc(SOCKET socket)
 
 void netRecvProc(SOCKET socket)
 { 
+	Profile profile(L"netRecvProc");
 	int curRecvTime = timeGetTime();
 
 	Session* pSession;
@@ -903,7 +911,10 @@ void netRecvProc(SOCKET socket)
 	pSession = findSession(socket);
 	pSession->lastRecvTime = timeGetTime();
 
-	recvRet = recv(socket, pSession->recvQ.GetRearBufferPtr(), pSession->recvQ.DirectEnqueueSize(), 0);
+	{
+		Profile profile(L"recv");
+		recvRet = recv(socket, pSession->recvQ.GetRearBufferPtr(), pSession->recvQ.DirectEnqueueSize(), 0);
+	}
 	if (recvRet == SOCKET_ERROR || recvRet == 0)
 	{
 		error = WSAGetLastError();
@@ -947,6 +958,8 @@ void netRecvProc(SOCKET socket)
 
 int completeRecvMessage(Session* pSession)
 {
+	Profile profile(L"completeRecvMessage");
+
 	Message message;
 	HEADER header;
 	int peekRet;
@@ -989,6 +1002,8 @@ void shutdown()
 // ---------------------------------------------
 bool messageProc(Session* pSession, BYTE type, Message* message)
 {
+	Profile profile(L"messageProc");
+
 	switch (type)
 	{
 	case PACKET_CS_MOVE_START:
@@ -1019,6 +1034,8 @@ bool messageProc(Session* pSession, BYTE type, Message* message)
 
 void moveStart(Session* pSession, Message* message)
 {
+	Profile profile(L"moveStart");
+
 	char direction;
 	short x;
 	short y;
@@ -1069,6 +1086,8 @@ void moveStart(Session* pSession, Message* message)
 
 void moveStop(Session* pSession, Message* message)
 {
+	Profile profile(L"moveStop");
+
 	char direction;
 	short x;
 	short y;
@@ -1106,6 +1125,8 @@ void moveStop(Session* pSession, Message* message)
 
 void attack1(Session* pSession, Message* message)
 {
+	Profile profile(L"attack1");
+
 	DWORD curTime = timeGetTime();
 	Character* pCharacter;
 	char direction;
@@ -1166,6 +1187,8 @@ void attack1(Session* pSession, Message* message)
 
 void attack2(Session* pSession, Message* message)
 {
+	Profile profile(L"attack2");
+
 	DWORD curTime = timeGetTime();
 	Character* pCharacter;
 	char direction;
@@ -1226,6 +1249,8 @@ void attack2(Session* pSession, Message* message)
 
 void attack3(Session* pSession, Message* message)
 {
+	Profile profile(L"attack3");
+
 	DWORD curTime = timeGetTime();
 	Character* pCharacter;
 	char direction;
@@ -1487,7 +1512,6 @@ void sendMessageUnicast(Session* pSession, Message* message)
 		pSession->flag = true;
 		pCharacter->flag = true;
 	}
-	message->moveReadPos(message->getDataSize());
 	g_sendCnt++;
 }
 
@@ -1511,7 +1535,6 @@ void sendMessageBroadcast(Session* pExceptSession, Message* message)
 			pCharacter->flag = true;
 		}
 	}
-	message->moveReadPos(message->getDataSize());
 	g_sendCnt += g_sessionMap.size();
 }
 
@@ -1536,7 +1559,6 @@ void sendMessageSectorOne(int sectorX, int sectorY, Message* message, Session* p
 			pCharacter->pSession->flag = true;
 		}
 	}
-	message->moveReadPos(message->getDataSize());
 }
 
 void sendMeesageAround(Session* pSession, Message* message, bool sendMe)
@@ -1565,5 +1587,4 @@ void sendMeesageAround(Session* pSession, Message* message, bool sendMe)
 			}
 		}
 	}
-	message->moveReadPos(message->getDataSize());
 }
