@@ -2,7 +2,7 @@
 #define _SERVER_H_
 
 // 네트워크 정보
-#define SERVER_PORT 20000
+#define SERVER_PORT 10210
 
 // 화면 크기
 #define MAP_WIDTH 6400
@@ -15,6 +15,7 @@
 #define SECTOR_HEIGHT 64
 #define SECTOR_WIDTH 64
 */
+
 
 #define SECTOR_MAX_Y 50	// 200
 #define SECTOR_MAX_X 50	// 256

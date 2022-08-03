@@ -26,6 +26,9 @@ int g_logLevel = LOG_LEVEL_SYSTEM;
 WCHAR g_logBuff[1024];
 WCHAR g_fileName[128];
 
+// 서버 컨트롤
+bool g_controlMode = false;
+
 // 네트워크
 SOCKET g_listenSock;
 unordered_map<SOCKET, Session*> g_sessionMap;
@@ -78,8 +81,8 @@ int wmain()
 		update();
 
 		serverControl();
-
-		monitor();
+		if(!g_controlMode)
+			monitor();
 	}
 
 	netCleanUp();
@@ -158,34 +161,32 @@ void netCleanUp()
 
 void serverControl()
 {
-	static bool controlMode = false;
-
 	if (_kbhit())
 	{
 		WCHAR controlKey = _getwch();
 
 		if (controlKey == L'u' || controlKey == L'U')
 		{
-			controlMode = true;
+			g_controlMode = true;
 
 			wprintf(L"Control Mode : Press Q - Quit \n");
 			wprintf(L"Control Mode : Press L - Key Lock \n");
 			wprintf(L"Control Mode : Press C - Change Log Level \n");
 		}
 
-		if ((controlKey == L'l' || controlKey == L'L') && controlMode)
+		if ((controlKey == L'l' || controlKey == L'L') && g_controlMode)
 		{
-			controlMode = false;
+			g_controlMode = false;
 			
 			wprintf(L"Control Lock...! Press U - Control Unlock\n");
 		}
 
-		if ((controlKey == L'q' || controlKey == L'Q') && controlMode)
+		if ((controlKey == L'q' || controlKey == L'Q') && g_controlMode)
 		{
 			g_shutdown = true;
 		}
 
-		if ((controlKey == L'c' || controlKey == L'C') && controlMode)
+		if ((controlKey == L'c' || controlKey == L'C') && g_controlMode)
 		{
 			wprintf(L"Change Log Level\n");
 			wprintf(L"\tPress D - DEBUG \n");
@@ -217,8 +218,6 @@ void serverControl()
 
 void monitor()
 {
-	Profile profile(L"monitor");
-
 	static int oldTime = timeGetTime();
 	int curTime = timeGetTime();
 	if (curTime - oldTime < 1000) return;
@@ -232,7 +231,7 @@ void monitor()
 	// 프레임이 떨어지면 로그 남기기
 	if (g_updateCnt < 24)
 	{
-		_LOG(LOG_LEVEL_SYSTEM, L"FPS Drop : %d", g_updateCnt);
+		_LOG(LOG_LEVEL_SYSTEM, L"Drop FPS : %d", g_updateCnt);
 	}
 
 	g_avgFrameTime = g_totalFrameTime / g_updateCnt;
@@ -280,9 +279,6 @@ void monitor()
 
 void log(WCHAR* str, int logLevel)
 {
-	Profile profile(L"log");
-
-	//wprintf(L"%s\n", str);
 	FILE* pFile;
 	time_t timer;
 	tm t;
@@ -487,11 +483,18 @@ void update()
 {
 	Profile profile(L"update");
 
+	static DWORD overTime = 0;
 	static DWORD prePrameTime = timeGetTime();
     DWORD curPrameTime = timeGetTime();
 	int frameTime = curPrameTime - prePrameTime;
-	if (frameTime < SLEEP_TIME) return;
-	prePrameTime = curPrameTime;
+	if (frameTime < SLEEP_TIME) 
+		return;
+	else
+	{
+		// 초과한 시간 누적
+		overTime += frameTime - SLEEP_TIME;
+		prePrameTime = curPrameTime;
+	}
 
 	// 모니터 링 데이터
 	if (g_maxFrameTime < frameTime)
@@ -499,82 +502,89 @@ void update()
 	else if (g_minFrameTime > frameTime)
 		g_minFrameTime = frameTime;
 	g_totalFrameTime += frameTime;
-	g_updateCnt++;
 
 	int curLogicTime = timeGetTime();
 
-	int nx;
-	int ny;
-
-	unordered_map<DWORD, Character*>::iterator iter;
-	for (iter = g_characterMap.begin(); iter != g_characterMap.end(); iter++)
+	while (1)
 	{
-		Character* pCharacter = iter->second;
+		g_updateCnt++;
 
-		if (pCharacter->hp <= 0)
+		int nx;
+		int ny;
+
+		unordered_map<DWORD, Character*>::iterator iter;
+		for (iter = g_characterMap.begin(); iter != g_characterMap.end(); iter++)
 		{
-			pCharacter->flag = true;
-			pCharacter->pSession->flag = true;
-		}
-		else
-		{
-			if (curPrameTime - pCharacter->pSession->lastRecvTime > NETWORK_PACKET_RECV_TIMEOUT)
+			Character* pCharacter = iter->second;
+
+			if (pCharacter->hp <= 0)
 			{
-				// _LOG(LOG_LEVEL_SYSTEM, L"TimeOut SessionID:%d", pCharacter->sessionID);
 				pCharacter->flag = true;
 				pCharacter->pSession->flag = true;
-				continue;
 			}
-
-			nx = pCharacter->x;
-			ny = pCharacter->y;
-			switch (pCharacter->action)
+			else
 			{
-			case PACKET_MOVE_DIR_LL:
-				nx -= FRAME_MOVE_X;
-				break;
-			case PACKET_MOVE_DIR_LU:
-				nx -= FRAME_MOVE_X;
-				ny -= FRAME_MOVE_Y;
-				break;
-			case PACKET_MOVE_DIR_UU:
-				ny -= FRAME_MOVE_Y;
-				break;
-			case PACKET_MOVE_DIR_RU:
-				nx += FRAME_MOVE_X;
-				ny -= FRAME_MOVE_Y;
-				break;
-			case PACKET_MOVE_DIR_RR:
-				nx += FRAME_MOVE_X;
-				break;
-			case PACKET_MOVE_DIR_RD:
-				nx += FRAME_MOVE_X;
-				ny += FRAME_MOVE_Y;
-				break;
-			case PACKET_MOVE_DIR_DD:
-				ny += FRAME_MOVE_Y;
-				break;
-			case PACKET_MOVE_DIR_LD:
-				nx -= FRAME_MOVE_X;
-				ny += FRAME_MOVE_Y;
-				break;
-			}
-
-			if (nx < RANGE_MOVE_LEFT || nx >= RANGE_MOVE_RIGHT || ny < RANGE_MOVE_TOP || ny >= RANGE_MOVE_BOTTOM) continue;
-			pCharacter->x = nx;
-			pCharacter->y = ny;
-
-			// 캐릭터가 이동한 경우 섹터를 다시 구한다.
-			if (pCharacter->action != STOP)
-			{
-				if (sectorUpdateCharacter(pCharacter))
+				if (curPrameTime - pCharacter->pSession->lastRecvTime > NETWORK_PACKET_RECV_TIMEOUT)
 				{
-					characterSectorUpdatePacket(pCharacter);
+					_LOG(LOG_LEVEL_DEBUG, L"TimeOut SessionID:%d", pCharacter->sessionID);
+					pCharacter->flag = true;
+					pCharacter->pSession->flag = true;
+					continue;
+				}
+
+				nx = pCharacter->x;
+				ny = pCharacter->y;
+				switch (pCharacter->action)
+				{
+				case PACKET_MOVE_DIR_LL:
+					nx -= FRAME_MOVE_X;
+					break;
+				case PACKET_MOVE_DIR_LU:
+					nx -= FRAME_MOVE_X;
+					ny -= FRAME_MOVE_Y;
+					break;
+				case PACKET_MOVE_DIR_UU:
+					ny -= FRAME_MOVE_Y;
+					break;
+				case PACKET_MOVE_DIR_RU:
+					nx += FRAME_MOVE_X;
+					ny -= FRAME_MOVE_Y;
+					break;
+				case PACKET_MOVE_DIR_RR:
+					nx += FRAME_MOVE_X;
+					break;
+				case PACKET_MOVE_DIR_RD:
+					nx += FRAME_MOVE_X;
+					ny += FRAME_MOVE_Y;
+					break;
+				case PACKET_MOVE_DIR_DD:
+					ny += FRAME_MOVE_Y;
+					break;
+				case PACKET_MOVE_DIR_LD:
+					nx -= FRAME_MOVE_X;
+					ny += FRAME_MOVE_Y;
+					break;
+				}
+
+				if (nx < RANGE_MOVE_LEFT || nx >= RANGE_MOVE_RIGHT || ny < RANGE_MOVE_TOP || ny >= RANGE_MOVE_BOTTOM) continue;
+				pCharacter->x = nx;
+				pCharacter->y = ny;
+
+				// 캐릭터가 이동한 경우 섹터를 다시 구한다.
+				if (pCharacter->action != STOP)
+				{
+					if (sectorUpdateCharacter(pCharacter))
+					{
+						characterSectorUpdatePacket(pCharacter);
+					}
 				}
 			}
 		}
+
+		if (overTime < SLEEP_TIME) break; 
+		else overTime -= SLEEP_TIME;
 	}
-	
+
 	disconnect();
 
 	g_logicTime += timeGetTime() - curLogicTime;
@@ -627,7 +637,6 @@ void disconnect()
 
 Character* createCharacter(Session* pSession, CHAR direction, CHAR action, CHAR hp, short x, short y)
 {
-	//Character* pCharacter = new Character;
 	Character* pCharacter = g_characterPool.Alloc();
 	pCharacter->pSession = pSession;
 	pCharacter->sessionID = pSession->sessionID;
@@ -667,7 +676,6 @@ Session* createSession(SOCKET socket, SOCKADDR_IN addr)
 {
 	static DWORD sessionID = 1;
 
-	//Session* session = new Session;
 	Session* session = g_sessionPool.Alloc();
 	session->sessionID = sessionID++;
 	session->sock = socket;
@@ -763,7 +771,7 @@ void netSelectSocket(SOCKET* userSocketTable, FD_SET* readSet, FD_SET* writeSet)
 		error = WSAGetLastError();
 		if (error != WSAEWOULDBLOCK)
 		{
-			_LOG(LOG_LEVEL_ERROR, L"select error : %d", WSAGetLastError());
+			_LOG(LOG_LEVEL_ERROR, L"Select Error : %d", WSAGetLastError());
 			shutdown();
 		}
 	}
@@ -818,7 +826,7 @@ void netAcceptProc()
 		int error = WSAGetLastError();
 		if (error != WSAEWOULDBLOCK)
 		{
-			_LOG(LOG_LEVEL_ERROR, L"accept error : %d", error);
+			_LOG(LOG_LEVEL_ERROR, L"Accept Error : %d", error);
 		}
 		return;
 	}
@@ -884,8 +892,8 @@ void netSendProc(SOCKET socket)
 		error = WSAGetLastError();
 		if (error != WSAEWOULDBLOCK)
 		{
-			if(error != 10054)
-				_LOG(LOG_LEVEL_ERROR, L"send error : %d", error);
+			if(error != 10054 && error != 10053)
+				_LOG(LOG_LEVEL_ERROR, L"Send Error : %d", error);
 
 			Character* pCharacter = findCharacter(pSession->sessionID);
 			pSession->flag = TRUE;
@@ -920,8 +928,8 @@ void netRecvProc(SOCKET socket)
 		error = WSAGetLastError();
 		if (error != WSAEWOULDBLOCK)
 		{
-			if (error != 0 && error != 10054)
-				_LOG(LOG_LEVEL_ERROR, L"recv error : %d", error);
+			if (error != 0 && error != 10054 && error != 10053)
+				_LOG(LOG_LEVEL_ERROR, L"Recv Error : %d", error);
 
 			Character* pCharacter = findCharacter(pSession->sessionID);
 			pSession->flag = TRUE;
@@ -943,7 +951,7 @@ void netRecvProc(SOCKET socket)
 
 			if (completeRet == -1)
 			{
-				_LOG(LOG_LEVEL_ERROR, L"recv Error SessionID:%d", pSession->sessionID);
+				_LOG(LOG_LEVEL_ERROR, L"Message Error SessionID:%d", pSession->sessionID);
 
 				Character* pCharacter = findCharacter(pSession->sessionID);
 				pSession->flag = TRUE;
@@ -1054,7 +1062,7 @@ void moveStart(Session* pSession, Message* message)
 
 		x = pCharacter->x;
 		y = pCharacter->y;
-		_LOG(LOG_LEVEL_ERROR, L"Sync Error SessionID:%d", pSession->sessionID);
+		_LOG(LOG_LEVEL_ERROR, L"maxFrameTime:%d ms | Sync Error SessionID:%d", g_maxFrameTime, pSession->sessionID);
 	}
 
 	switch (direction)
@@ -1106,7 +1114,7 @@ void moveStop(Session* pSession, Message* message)
 
 		x = pCharacter->x;
 		y = pCharacter->y;
-		_LOG(LOG_LEVEL_ERROR, L"Sync Error SessionID:%d", pSession->sessionID);
+		_LOG(LOG_LEVEL_ERROR, L"maxFrameTime:%d ms | Sync Error SessionID:%d", g_maxFrameTime, pSession->sessionID);
 	}
 
 	pCharacter->action = STOP;
